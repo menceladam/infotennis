@@ -72,11 +72,10 @@ def main():
                 rating1 = blended_rating(m1.row, surface)
                 rating2 = blended_rating(m2.row, surface)
                 win_prob_1 = 1 / (1 + 10 ** ((rating2 - rating1) / 400))
-                odds1, odds2 = decimal_odds(win_prob_1), decimal_odds(1 - win_prob_1)
 
                 fav_name, fav_prob = (r.p1_name, win_prob_1) if win_prob_1 >= 0.5 else (r.p2_name, 1 - win_prob_1)
 
-                # Handicap line whose fair odds land in the 1.80-2.00 band,
+                # Handicap line closest to the 1.80-2.00 fair-odds band,
                 # relative to the favorite -- built for a light Monte Carlo
                 # run since this runs for every match, not just the top 10.
                 proj = project_handicap(win_prob_1, base_rate, n_sims=4000)
@@ -85,15 +84,10 @@ def main():
                     -line: 1 - prob for line, prob in proj.prob_cover.items()
                 }
                 target_line, target_prob, target_odds = line_for_odds_range(fav_cover, 1.80, 2.00)
-                in_range = 1.80 <= target_odds <= 2.00
-                range_note = "" if in_range else " (outside 1.80-2.00, closest available)"
                 sign = "+" if target_line > 0 else ""
 
-                print(f"  {r.round}: {r.p1_name} {win_prob_1:.0%} (fair {odds1:.2f}) vs "
-                      f"{r.p2_name} {1-win_prob_1:.0%} (fair {odds2:.2f})"
-                      f"  -> favorite: {fav_name} {fav_prob:.0%}")
-                print(f"      target handicap: {fav_name} {sign}{target_line} games "
-                      f"-> fair odds {target_odds:.2f} ({target_prob:.1%}){range_note}")
+                print(f"  {r.round}: {r.p1_name} ({win_prob_1:.0%}) vs {r.p2_name} ({1-win_prob_1:.0%})"
+                      f"  ->  target: {fav_name} {sign}{target_line} games @ {target_odds:.2f}")
 
                 predictions.append({
                     "tournament": tourney, "round": r.round, "surface": surface,
