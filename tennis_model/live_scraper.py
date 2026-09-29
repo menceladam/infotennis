@@ -42,12 +42,28 @@ class MatchRecord:
     score: str | None  # None if upcoming
 
 
+DISPLAY_NAME_RE = re.compile(r'<b>([^<]+?)\s*Challenger</b><br/><a href="[^"]*current/(\d{4}[A-Za-z0-9()\.\-]*Challenger)\.html"')
+
+
 def list_current_challenger_tournaments() -> list[str]:
     """Return tournament slugs (e.g. '2026Plovdiv4Challenger') currently
     listed on the homepage's Current Challenger Tour section."""
     resp = requests.get(BASE_URL + "/", headers=HEADERS, timeout=30)
     resp.raise_for_status()
     return sorted(set(TOURNEY_LINK_RE.findall(resp.text)))
+
+
+def list_current_challenger_tournaments_with_names() -> dict[str, str]:
+    """Return {slug: display_name} e.g. {'2026MouilleronleCaptifChallenger':
+    'Mouilleron le Captif'}, falling back to a slug-derived name for any
+    tournament whose display name couldn't be found."""
+    resp = requests.get(BASE_URL + "/", headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    found = {slug: name.strip() for name, slug in DISPLAY_NAME_RE.findall(resp.text)}
+    result = {}
+    for slug in list_current_challenger_tournaments():
+        result[slug] = found.get(slug, slug[4:].replace("Challenger", "").strip())
+    return result
 
 
 def _parse_entries(raw: str, tournament: str, status: str) -> list[MatchRecord]:
@@ -82,13 +98,13 @@ def _parse_entries(raw: str, tournament: str, status: str) -> list[MatchRecord]:
     return records
 
 
-def fetch_tournament_matches(slug: str) -> list[MatchRecord]:
+def fetch_tournament_matches(slug: str, display_name: str | None = None) -> list[MatchRecord]:
     url = f"{BASE_URL}/current/{slug}.html"
     resp = requests.get(url, headers=HEADERS, timeout=30)
     resp.raise_for_status()
     html = resp.text
 
-    tournament_name = slug[4:].replace("Challenger", "").strip()
+    tournament_name = display_name or slug[4:].replace("Challenger", "").strip()
 
     records = []
     completed_m = JS_VAR_RE("completedSingles").search(html)
@@ -102,9 +118,9 @@ def fetch_tournament_matches(slug: str) -> list[MatchRecord]:
 
 def fetch_all_current_challenger_matches() -> list[MatchRecord]:
     all_records = []
-    for slug in list_current_challenger_tournaments():
+    for slug, name in list_current_challenger_tournaments_with_names().items():
         try:
-            all_records += fetch_tournament_matches(slug)
+            all_records += fetch_tournament_matches(slug, display_name=name)
         except requests.RequestException as e:
             print(f"  warning: failed to fetch {slug}: {e}")
     return all_records
