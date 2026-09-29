@@ -25,6 +25,7 @@ MANIFEST
 data/*
 !data/players_ATP.csv
 !data/ratings_latest.csv
+!data/predictions_log.csv
 log/
 *.json
 .env

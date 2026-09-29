@@ -31,10 +31,13 @@ jobs:
       - name: Recompute Elo ratings
         run: python -m tennis_model.update_ratings
 
-      - name: Commit updated ratings snapshot
+      - name: Resolve pending predictions against completed results
+        run: python -m tennis_model.tracker resolve
+
+      - name: Commit updated ratings snapshot and prediction log
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/ratings_latest.csv
+          git add data/ratings_latest.csv data/predictions_log.csv
           git diff --cached --quiet || git commit -m "Daily Elo ratings update $(date -u +%Y-%m-%d)"
           git push

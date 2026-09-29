@@ -1,0 +1,6 @@
+id,logged_at,tournament,round,surface,p1,p2,p1_matches,p2_matches,win_prob_p1,favorite,target_line,target_odds,status,actual_winner,actual_score,favorite_margin,prediction_correct,line_covered
+1,2026-09-29T13:12:57,Mouilleron le Captif,R1,Hard,Philip Henning,Tristan Schoolkate,51,248,0.27,Tristan Schoolkate,3.5,2.12,pending,,,,,
+2,2026-09-29T13:12:57,Jingshan,R1,Hard,Marat Sharipov,Dalibor Svrcina,57,291,0.47,Dalibor Svrcina,-0.5,1.86,pending,,,,,
+3,2026-09-29T13:12:57,Curitiba,R1,Clay,Lorenzo Joaquin Rodriguez,Tomas Barrios Vera,39,443,0.13,Tomas Barrios Vera,4.5,1.82,pending,,,,,
+4,2026-09-29T13:12:57,Columbus,R1,Hard,Igor Ribeiro Marcondes,Andrew Fenty,49,34,0.79,Igor Ribeiro Marcondes,3.5,1.76,pending,,,,,
+5,2026-09-29T13:12:57,Mouilleron le Captif,R1,Hard,Billy Harris,Felix Balshaw,268,30,0.37,Felix Balshaw,1.5,1.81,pending,,,,,
