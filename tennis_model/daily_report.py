@@ -14,6 +14,7 @@ from tennis_model.elo import SURFACE_WEIGHT
 from tennis_model.handicap import empirical_baseline_serve_rate, project_handicap
 from tennis_model.live_scraper import fetch_all_current_challenger_matches
 from tennis_model.name_match import NameMatcher
+from tennis_model.odds import decimal_odds, american_odds
 from tennis_model.surface_lookup import lookup_surface
 
 RATINGS_PATH = "data/ratings_latest.csv"
@@ -71,9 +72,11 @@ def main():
                 rating1 = blended_rating(m1.row, surface)
                 rating2 = blended_rating(m2.row, surface)
                 win_prob_1 = 1 / (1 + 10 ** ((rating2 - rating1) / 400))
+                odds1, odds2 = decimal_odds(win_prob_1), decimal_odds(1 - win_prob_1)
 
                 fav_name, fav_prob = (r.p1_name, win_prob_1) if win_prob_1 >= 0.5 else (r.p2_name, 1 - win_prob_1)
-                print(f"  {r.round}: {r.p1_name} ({win_prob_1:.0%}) vs {r.p2_name} ({1-win_prob_1:.0%})"
+                print(f"  {r.round}: {r.p1_name} {win_prob_1:.0%} (fair {odds1:.2f}) vs "
+                      f"{r.p2_name} {1-win_prob_1:.0%} (fair {odds2:.2f})"
                       f"  -> favorite: {fav_name} {fav_prob:.0%}")
 
                 predictions.append({
@@ -85,16 +88,39 @@ def main():
 
     if predictions:
         print(f"\n\n{'='*70}")
-        print("MOST CONFIDENT PICKS (not verified against any odds -- this is")
-        print("model confidence only, not positive EV until checked against a line)")
+        print("MOST CONFIDENT PICKS -- fair (no-vig) odds from the model.")
+        print("Bet only if Bet365's actual price is HIGHER (better payout) than")
+        print("the 'fair' decimal odds below -- that gap is the edge. If Bet365")
+        print("is lower/even, there's no value here even though the model likes it.")
+        print("Set Bet365's odds format to Decimal (Account -> Settings -> Odds")
+        print("Display) for a direct apples-to-apples comparison.")
         print(f"{'='*70}")
         top = sorted(predictions, key=lambda p: p["win_prob"], reverse=True)[:10]
         for p in top:
             proj = project_handicap(p["win_prob_1"], p["base_rate"], n_sims=5000)
             fav_is_p1 = p["favorite"] == p["p1"]
+            underdog = p["p2"] if fav_is_p1 else p["p1"]
             margin = proj.mean_game_margin if fav_is_p1 else -proj.mean_game_margin
-            print(f"  [{p['tournament']} {p['round']}] {p['favorite']} {p['win_prob']:.0%} to beat "
-                  f"{p['p2'] if fav_is_p1 else p['p1']}  (proj. margin {margin:+.1f} games)")
+            fav_ml_decimal = decimal_odds(p["win_prob"])
+            fav_ml_american = american_odds(p["win_prob"])
+
+            print(f"\n  [{p['tournament']} {p['round']}] {p['favorite']} vs {underdog}  ({p['surface']})")
+            print(f"    Moneyline -- {p['favorite']} to win: fair odds {fav_ml_decimal:.2f} "
+                  f"(American {fav_ml_american:+d}), model prob {p['win_prob']:.1%}")
+            # proj.prob_cover is relative to p1; flip to be relative to the
+            # favorite when the favorite is p2, so both the sign and the
+            # comparison against `margin` (already favorite-relative) line up.
+            fav_cover = proj.prob_cover if fav_is_p1 else {
+                -line: 1 - prob for line, prob in proj.prob_cover.items()
+            }
+            print(f"    Game handicap -- projected margin {p['favorite']} {margin:+.1f} games. "
+                  f"Fair odds for {p['favorite']} to cover:")
+            lines_by_dist = sorted(fav_cover.keys(), key=lambda L: abs(L - margin))[:4]
+            for line in sorted(lines_by_dist):
+                cover_prob = fav_cover[line]
+                sign = "+" if line > 0 else ""
+                print(f"      {p['favorite']} {sign}{line} games: fair odds {decimal_odds(cover_prob):.2f} "
+                      f"({cover_prob:.1%})")
 
 
 if __name__ == "__main__":
