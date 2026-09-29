@@ -21,6 +21,7 @@ import pandas as pd
 from scipy.optimize import brentq
 
 from tennis_model.markov import match_win_prob, game_win_prob, tiebreak_win_prob
+from tennis_model.odds import decimal_odds
 
 DEFAULT_BASE_SERVE_RATE = 0.62  # fallback if empirical data unavailable
 RECENT_YEARS_FOR_BASELINE = 4
@@ -153,12 +154,18 @@ def _simulate_tiebreak(p_a_serve: float, p_b_serve: float, rng: np.random.Genera
         point_num += 1
 
 
+# Wide enough to cover any realistic best-of-3 game margin (max possible
+# is +/-12 for a 6-0 6-0 sweep); prob_cover for the extra lines is nearly
+# free once margins are already simulated.
+DEFAULT_LINES = tuple(x - 0.5 for x in range(-11, 12) if x != 0)
+
+
 def project_handicap(
     target_match_win_prob: float,
     base_rate: float,
     best_of: int = 3,
     n_sims: int = 20000,
-    lines: tuple = (-4.5, -3.5, -2.5, -1.5, 1.5, 2.5, 3.5, 4.5),
+    lines: tuple = DEFAULT_LINES,
     seed: int = 0,
 ) -> HandicapProjection:
     p_a, p_b = solve_serve_rates(target_match_win_prob, base_rate, best_of)
@@ -181,3 +188,23 @@ def project_handicap(
         median_game_margin=float(np.median(margins)),
         prob_cover=prob_cover,
     )
+
+
+def line_for_odds_range(prob_cover: dict, low_odds: float, high_odds: float) -> tuple | None:
+    """Find the handicap line (favorite-relative: positive = favorite
+    giving games) whose fair decimal odds fall within [low_odds, high_odds].
+    Returns (line, prob, fair_odds), or None if no line in prob_cover lands
+    in range (picks the closest one instead, flagged via a 3rd return slot
+    left None-free -- callers should treat a returned tuple as best-effort
+    when the exact range isn't hit)."""
+    target_lo, target_hi = 1 / high_odds, 1 / low_odds  # odds range -> prob range
+    candidates = [(line, p) for line, p in prob_cover.items() if target_lo <= p <= target_hi]
+    if candidates:
+        # Prefer the one closest to the middle of the target probability band.
+        mid = (target_lo + target_hi) / 2
+        line, p = min(candidates, key=lambda lp: abs(lp[1] - mid))
+        return line, p, decimal_odds(p)
+    # Nothing landed exactly in range -- return the closest line to the band.
+    mid = (target_lo + target_hi) / 2
+    line, p = min(prob_cover.items(), key=lambda lp: abs(lp[1] - mid))
+    return line, p, decimal_odds(p)
