@@ -1,0 +1,40 @@
+name: Daily Elo Ratings Update
+
+on:
+  schedule:
+    # 06:00 UTC daily — after most Challenger matches from the day before
+    # (played across European/Asian/US time zones) have been recorded.
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-ratings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download full match history
+        # End year is intentionally past the current year: missing years
+        # 404 and are skipped without failing, so this never needs bumping.
+        run: python scripts/download_tennismylife.py 2000 2035
+
+      - name: Recompute Elo ratings
+        run: python -m tennis_model.update_ratings
+
+      - name: Commit updated ratings snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/ratings_latest.csv
+          git diff --cached --quiet || git commit -m "Daily Elo ratings update $(date -u +%Y-%m-%d)"
+          git push
