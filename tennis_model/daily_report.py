@@ -21,6 +21,13 @@ from tennis_model.surface_lookup import lookup_surface
 
 RATINGS_PATH = "data/ratings_latest.csv"
 
+# Below this many career matches, a player's Elo rating is still close to
+# the 1500 starting point and hasn't stabilized -- confirmed concretely on
+# a real match (Perot 16 matches / Ostapenkov 11 matches), where the model
+# disagreed with both the market AND the ATP ranking gap, and that
+# "edge" turned out to be rating noise, not signal.
+MIN_MATCHES = 25
+
 
 def blended_rating(row: pd.Series, surface: str) -> float:
     surf_col = f"{surface.lower()}_rating"
@@ -69,6 +76,12 @@ def main():
                 if m1.row is None or m2.row is None:
                     missing = r.p1_name if m1.row is None else r.p2_name
                     print(f"  {r.round}: {r.p1_name} vs {r.p2_name}  -- no rating for '{missing}', skipped")
+                    continue
+                if m1.row["overall_matches"] < MIN_MATCHES or m2.row["overall_matches"] < MIN_MATCHES:
+                    thin = r.p1_name if m1.row["overall_matches"] < MIN_MATCHES else r.p2_name
+                    thin_n = min(m1.row["overall_matches"], m2.row["overall_matches"])
+                    print(f"  {r.round}: {r.p1_name} vs {r.p2_name}  -- '{thin}' has only {thin_n} career "
+                          f"matches (<{MIN_MATCHES}), rating too unreliable, skipped")
                     continue
 
                 rating1 = blended_rating(m1.row, surface)

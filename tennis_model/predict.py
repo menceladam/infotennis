@@ -16,6 +16,10 @@ from tennis_model.markov import match_win_prob
 
 RATINGS_PATH = Path(__file__).resolve().parent.parent / "data" / "ratings_latest.csv"
 
+# See MIN_MATCHES in daily_report.py -- same reasoning, confirmed on a real
+# match (Perot/Ostapenkov) where a sub-25-match rating produced a false edge.
+MIN_MATCHES = 25
+
 
 def find_player(ratings: pd.DataFrame, query: str) -> pd.Series:
     matches = ratings[ratings["name"].str.contains(query, case=False, na=False)]
@@ -58,6 +62,11 @@ def main():
     print(f"\n{a['name']} (rating {a_blend:.0f}, {int(a['overall_matches'])} career matches) vs "
           f"{b['name']} (rating {b_blend:.0f}, {int(b['overall_matches'])} career matches)")
     print(f"Surface: {args.surface}  |  Elo match win probability: {a['name']}={win_prob_a:.1%}  {b['name']}={1-win_prob_a:.1%}")
+
+    if a["overall_matches"] < MIN_MATCHES or b["overall_matches"] < MIN_MATCHES:
+        thin = a["name"] if a["overall_matches"] < MIN_MATCHES else b["name"]
+        print(f"\n*** WARNING: '{thin}' has under {MIN_MATCHES} career matches -- rating is still close to the "
+              f"1500 starting point and hasn't stabilized. Do not treat this as a reliable prediction. ***")
 
     print("\nLoading match history to compute empirical serve baseline...")
     matches = load_all_matches()
