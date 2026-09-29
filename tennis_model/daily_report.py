@@ -11,7 +11,9 @@ import pandas as pd
 
 from tennis_model.data_loader import load_all_matches
 from tennis_model.elo import SURFACE_WEIGHT
-from tennis_model.handicap import empirical_baseline_serve_rate, project_handicap, line_for_odds_range
+from tennis_model.handicap import (
+    empirical_baseline_serve_rate, project_handicap, line_for_odds_range, format_favorite_line,
+)
 from tennis_model.live_scraper import fetch_all_current_challenger_matches
 from tennis_model.name_match import NameMatcher
 from tennis_model.odds import decimal_odds, american_odds
@@ -84,10 +86,9 @@ def main():
                     -line: 1 - prob for line, prob in proj.prob_cover.items()
                 }
                 target_line, target_prob, target_odds = line_for_odds_range(fav_cover, 1.80, 2.00)
-                sign = "+" if target_line > 0 else ""
 
                 print(f"  {r.round}: {r.p1_name} ({win_prob_1:.0%}) vs {r.p2_name} ({1-win_prob_1:.0%})"
-                      f"  ->  target: {fav_name} {sign}{target_line} games @ {target_odds:.2f}")
+                      f"  ->  target: {format_favorite_line(fav_name, target_line)} @ {target_odds:.2f}")
 
                 predictions.append({
                     "tournament": tourney, "round": r.round, "surface": surface,
@@ -128,8 +129,7 @@ def main():
             lines_by_dist = sorted(fav_cover.keys(), key=lambda L: abs(L - margin))[:4]
             for line in sorted(lines_by_dist):
                 cover_prob = fav_cover[line]
-                sign = "+" if line > 0 else ""
-                print(f"      {p['favorite']} {sign}{line} games: fair odds {decimal_odds(cover_prob):.2f} "
+                print(f"      {format_favorite_line(p['favorite'], line)}: fair odds {decimal_odds(cover_prob):.2f} "
                       f"({cover_prob:.1%})")
 
 

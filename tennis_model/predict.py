@@ -11,7 +11,7 @@ import pandas as pd
 
 from tennis_model.data_loader import load_all_matches
 from tennis_model.elo import SURFACE_WEIGHT
-from tennis_model.handicap import empirical_baseline_serve_rate, project_handicap
+from tennis_model.handicap import empirical_baseline_serve_rate, project_handicap, format_favorite_line
 from tennis_model.markov import match_win_prob
 
 RATINGS_PATH = Path(__file__).resolve().parent.parent / "data" / "ratings_latest.csv"
@@ -71,8 +71,7 @@ def main():
     print(f"Mean game margin: {a['name']} by {proj.mean_game_margin:+.2f} games (median {proj.median_game_margin:+.0f})")
     print("\nProbability A wins by more than N games (i.e. covers a -N.5 handicap):")
     for line, prob in sorted(proj.prob_cover.items()):
-        sign = "+" if line > 0 else ""
-        print(f"  {a['name']} {sign}{line}: {prob:.1%}")
+        print(f"  {format_favorite_line(a['name'], line)}: {prob:.1%}")
 
 
 if __name__ == "__main__":

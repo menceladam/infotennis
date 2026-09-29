@@ -190,6 +190,22 @@ def project_handicap(
     )
 
 
+def format_favorite_line(favorite_name: str, line: float) -> str:
+    """Standard bookmaker handicap notation. `line` here is the
+    favorite-margin threshold used throughout this module (prob_cover[line]
+    = P(favorite's game margin > line)) -- NOT the number printed on a
+    betting slip. Winning that condition is exactly what a "-line" bet on
+    the favorite means, so a positive threshold prints with a MINUS sign
+    (favorite must win by more than `line` games) and a negative threshold
+    prints with a PLUS sign (favorite can even lose by up to |line| games
+    and still cover). Getting this backwards makes every favorite line
+    look like an underdog line.
+    """
+    if line > 0:
+        return f"{favorite_name} -{line}"
+    return f"{favorite_name} +{abs(line)}"
+
+
 def line_for_odds_range(prob_cover: dict, low_odds: float, high_odds: float) -> tuple | None:
     """Find the handicap line (favorite-relative: positive = favorite
     giving games) whose fair decimal odds fall within [low_odds, high_odds].
