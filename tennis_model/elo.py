@@ -44,6 +44,27 @@ RETIREMENT_WEIGHT = 0.5
 # surface_rating + (1 - SURFACE_WEIGHT) * overall_rating.
 SURFACE_WEIGHT = 0.65
 
+# --- Recent form ---
+# Tracks each player's exponentially-decayed over/under-performance vs
+# their Elo-predicted win probability. Shrunk toward zero based on an
+# "effective sample size" so a single upset doesn't swing it -- with no
+# matches, effective_n=0 and the adjustment is exactly zero.
+import math
+
+FORM_HALF_LIFE_MATCHES = 12
+FORM_DECAY = 0.5 ** (1 / FORM_HALF_LIFE_MATCHES)
+FORM_SHRINKAGE_PRIOR = 6.0  # effective matches worth of "regress to zero"
+FORM_ELO_SCALE = 400 / math.log(10)  # logit(p) -> Elo points
+FORM_MAX_ELO = 100.0
+
+# --- Head-to-head ---
+# Beta-binomial shrinkage toward 50/50; with zero prior meetings this is
+# exactly 0.5 (no adjustment). Most Challenger pairs have met 0-2 times,
+# so a strong prior keeps this from overreacting to a single result.
+H2H_PRIOR_ALPHA = 4.0
+H2H_WEIGHT = 0.6  # extra global damping, tuned via backtest
+H2H_MAX_ELO = 60.0
+
 
 @dataclass
 class PlayerState:
@@ -51,6 +72,8 @@ class PlayerState:
     overall_matches: int = 0
     surface: dict = field(default_factory=lambda: {s: START_RATING for s in SURFACES})
     surface_matches: dict = field(default_factory=lambda: {s: 0 for s in SURFACES})
+    form_ewma: float = 0.0
+    form_effective_n: float = 0.0
 
 
 def expected_score(rating_a: float, rating_b: float) -> float:
@@ -67,9 +90,49 @@ def blended_rating(state: PlayerState, surface: str) -> float:
     return SURFACE_WEIGHT * state.surface[surface] + (1 - SURFACE_WEIGHT) * state.overall
 
 
+def form_adjustment_elo(state: PlayerState) -> float:
+    """Elo-point nudge from recent over/under-performance. Zero for a
+    player with no match history (effective_n starts at 0)."""
+    if state.form_effective_n <= 0:
+        return 0.0
+    shrink = state.form_effective_n / (state.form_effective_n + FORM_SHRINKAGE_PRIOR)
+    shrunk_residual = state.form_ewma * shrink
+    adjustment = shrunk_residual * FORM_ELO_SCALE
+    return max(-FORM_MAX_ELO, min(FORM_MAX_ELO, adjustment))
+
+
+def _update_form(state: PlayerState, residual: float) -> None:
+    """residual = actual outcome (1 or 0) minus that match's predicted
+    win probability for this player. Called after form_adjustment_elo
+    has already been read for this match (no lookahead)."""
+    prior_n = state.form_effective_n
+    new_n = FORM_DECAY * prior_n + 1.0
+    state.form_ewma = (FORM_DECAY * prior_n * state.form_ewma + residual) / new_n
+    state.form_effective_n = new_n
+
+
+def _pair_key(id_a: str, id_b: str) -> tuple:
+    return tuple(sorted((id_a, id_b)))
+
+
+def h2h_adjustment_elo(h2h_wins: dict, player_id: str, opponent_id: str) -> float:
+    """Elo-point nudge from shrunk historical head-to-head record.
+    Zero with no prior meetings (shrunk prob = exactly 0.5)."""
+    key = _pair_key(player_id, opponent_id)
+    record = h2h_wins.get(key, {})
+    wins_p = record.get(player_id, 0)
+    wins_o = record.get(opponent_id, 0)
+    shrunk_prob = (wins_p + H2H_PRIOR_ALPHA) / (wins_p + wins_o + 2 * H2H_PRIOR_ALPHA)
+    shrunk_prob = min(max(shrunk_prob, 1e-4), 1 - 1e-4)
+    logit = math.log(shrunk_prob / (1 - shrunk_prob))
+    adjustment = logit * FORM_ELO_SCALE * H2H_WEIGHT
+    return max(-H2H_MAX_ELO, min(H2H_MAX_ELO, adjustment))
+
+
 class EloEngine:
     def __init__(self):
         self.players: dict[str, PlayerState] = {}
+        self.h2h_wins: dict[tuple, dict] = {}
 
     def _get(self, player_id: str) -> PlayerState:
         if player_id not in self.players:
@@ -99,6 +162,20 @@ class EloEngine:
             l_pre_blend = blended_rating(l_state, surface)
             win_prob_blend = expected_score(w_pre_blend, l_pre_blend)
 
+            # Form- and H2H-adjusted variants, computed from pre-match state
+            # only (no lookahead), for backtesting against the baseline.
+            w_form_adj = form_adjustment_elo(w_state)
+            l_form_adj = form_adjustment_elo(l_state)
+            win_prob_form = expected_score(w_pre_blend + w_form_adj, l_pre_blend + l_form_adj)
+
+            w_h2h_adj = h2h_adjustment_elo(self.h2h_wins, row["winner_id"], row["loser_id"])
+            l_h2h_adj = h2h_adjustment_elo(self.h2h_wins, row["loser_id"], row["winner_id"])
+            win_prob_h2h = expected_score(w_pre_blend + w_h2h_adj, l_pre_blend + l_h2h_adj)
+
+            win_prob_full = expected_score(
+                w_pre_blend + w_form_adj + w_h2h_adj, l_pre_blend + l_form_adj + l_h2h_adj
+            )
+
             weight = self._match_weight(row)
 
             # Overall rating update
@@ -120,6 +197,17 @@ class EloEngine:
                 w_state.surface_matches[surface] += 1
                 l_state.surface_matches[surface] += 1
 
+            # Update form EWMA using this match's actual outcome vs the
+            # blended-rating prediction (the adjustments above already used
+            # the pre-update state, so this is safe to do now).
+            _update_form(w_state, 1 - win_prob_blend)
+            _update_form(l_state, win_prob_blend - 1)
+
+            # Update H2H record for this pair.
+            key = _pair_key(row["winner_id"], row["loser_id"])
+            record = self.h2h_wins.setdefault(key, {})
+            record[row["winner_id"]] = record.get(row["winner_id"], 0) + 1
+
             records.append({
                 "tourney_date": row["tourney_date"],
                 "tourney_id": row["tourney_id"],
@@ -134,6 +222,9 @@ class EloEngine:
                 "winner_pre_blend": w_pre_blend,
                 "loser_pre_blend": l_pre_blend,
                 "win_prob_blend": win_prob_blend,
+                "win_prob_form": win_prob_form,
+                "win_prob_h2h": win_prob_h2h,
+                "win_prob_full": win_prob_full,
                 "retirement": row["retirement"],
             })
 
@@ -150,8 +241,12 @@ class EloEngine:
             for s in SURFACES:
                 row[f"{s.lower()}_rating"] = state.surface[s]
                 row[f"{s.lower()}_matches"] = state.surface_matches[s]
+            row["form_adjustment"] = form_adjustment_elo(state)
             rows.append(row)
         return pd.DataFrame(rows).sort_values("overall", ascending=False).reset_index(drop=True)
+
+    def h2h_lookup(self, player_id: str, opponent_id: str) -> float:
+        return h2h_adjustment_elo(self.h2h_wins, player_id, opponent_id)
 
 
 if __name__ == "__main__":

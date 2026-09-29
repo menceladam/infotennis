@@ -95,6 +95,35 @@ def main():
     chall_cal = eval_log[eval_log["level"] == "challenger"]
     print(calibration_symmetric(chall_cal, prob_col="win_prob_cal").to_string())
 
+    compare_variants(log, EVAL_START)
+
+
+def compare_variants(log: pd.DataFrame, eval_start: str) -> None:
+    """Does adding recent-form and/or H2H actually help, on the same
+    walk-forward holdout, each independently recalibrated (a variant
+    that shifts the average confidence needs its own temperature fit,
+    not the baseline's) -- challenger level only, since that's the
+    market this model is for."""
+    print(f"\n\n{'='*70}")
+    print("FORM / H2H VARIANT COMPARISON (challenger level, walk-forward)")
+    print(f"{'='*70}")
+
+    train_log = log[log["tourney_date"] < eval_start]
+    eval_log = log[log["tourney_date"] >= eval_start].copy()
+
+    variants = {
+        "baseline (blend only)": "win_prob_blend",
+        "+ form": "win_prob_form",
+        "+ H2H": "win_prob_h2h",
+        "+ form + H2H": "win_prob_full",
+    }
+
+    for label, col in variants.items():
+        temp = fit_temperature(train_log[[col]].rename(columns={col: "win_prob_blend"}))
+        eval_log[f"{col}_cal"] = apply_temperature(eval_log[col], temp)
+        chall = eval_log[eval_log["level"] == "challenger"]
+        evaluate(chall, f"{label:25s} (T={temp:.3f})", prob_col=f"{col}_cal")
+
 
 if __name__ == "__main__":
     main()

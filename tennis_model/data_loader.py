@@ -43,6 +43,8 @@ def load_all_matches() -> pd.DataFrame:
     matches["tourney_date"] = pd.to_datetime(matches["tourney_date"], format="%Y%m%d")
     matches["match_num"] = pd.to_numeric(matches["match_num"], errors="coerce").fillna(0)
 
+    matches = matches.dropna(subset=["winner_id", "loser_id"])
+
     matches = matches.sort_values(
         ["tourney_date", "tourney_id", "match_num"]
     ).reset_index(drop=True)
