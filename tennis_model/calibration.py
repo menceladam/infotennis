@@ -39,3 +39,15 @@ def apply_temperature(prob: pd.Series, temperature: float) -> pd.Series:
     raw_logit = _logit(prob.to_numpy())
     calibrated = 1 / (1 + np.exp(-raw_logit / temperature))
     return pd.Series(calibrated, index=prob.index)
+
+
+def apply_platt(prob, a: float, b: float):
+    """Apply a fitted 2-parameter Platt scaling (intercept + slope in
+    logit space): sigmoid(a + b * logit(prob)). More flexible than
+    apply_temperature (scale-only, sigmoid(logit(p)/T)): a pure
+    temperature can't move a prediction sitting at logit=0, so it can't
+    fix a raw predictor that's biased at the center. Accepts a scalar or
+    array-like; returns the same shape as input."""
+    raw_logit = _logit(np.asarray(prob, dtype=float))
+    calibrated = 1 / (1 + np.exp(-(a + b * raw_logit)))
+    return calibrated if calibrated.shape else float(calibrated)
