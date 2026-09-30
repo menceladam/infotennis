@@ -74,10 +74,12 @@ class HandicapProjection:
     mean_game_margin: float  # positive = A favored by this many games on average
     median_game_margin: float
     prob_cover: dict  # {line: prob A wins by more than `line` games}
+    set_score_probs: dict  # {"2-0": prob A wins 2-0, "2-1": ..., "0-2": ..., "1-2": ...} (best-of-3 only)
 
 
 def simulate_match(p_a_serve: float, p_b_serve: float, best_of: int = 3, rng: np.random.Generator = None):
-    """Simulate one match point-by-point. Returns (a_won_match, games_a, games_b)."""
+    """Simulate one match point-by-point.
+    Returns (a_won_match, games_a, games_b, sets_a, sets_b)."""
     rng = rng or np.random.default_rng()
     sets_needed = best_of // 2 + 1
     sets_a = sets_b = 0
@@ -116,7 +118,7 @@ def simulate_match(p_a_serve: float, p_b_serve: float, best_of: int = 3, rng: np
         total_games_b += games_b
         a_serves_first = not a_serves_first
 
-    return sets_a > sets_b, total_games_a, total_games_b
+    return sets_a > sets_b, total_games_a, total_games_b, sets_a, sets_b
 
 
 def _simulate_game(p: float, rng: np.random.Generator) -> bool:
@@ -173,12 +175,25 @@ def project_handicap(
     rng = np.random.default_rng(seed)
     margins = np.empty(n_sims)
     wins = np.empty(n_sims, dtype=bool)
+    set_scores_a = np.empty(n_sims, dtype=np.int8)
+    set_scores_b = np.empty(n_sims, dtype=np.int8)
     for n in range(n_sims):
-        a_won, ga, gb = simulate_match(p_a, p_b, best_of, rng)
+        a_won, ga, gb, sa, sb = simulate_match(p_a, p_b, best_of, rng)
         margins[n] = ga - gb
         wins[n] = a_won
+        set_scores_a[n] = sa
+        set_scores_b[n] = sb
 
     prob_cover = {line: float((margins > line).mean()) for line in lines}
+
+    set_score_probs = {}
+    if best_of == 3:
+        set_score_probs = {
+            "2-0": float(((set_scores_a == 2) & (set_scores_b == 0)).mean()),
+            "2-1": float(((set_scores_a == 2) & (set_scores_b == 1)).mean()),
+            "0-2": float(((set_scores_a == 0) & (set_scores_b == 2)).mean()),
+            "1-2": float(((set_scores_a == 1) & (set_scores_b == 2)).mean()),
+        }
 
     return HandicapProjection(
         p_a_serve=p_a,
@@ -187,6 +202,7 @@ def project_handicap(
         mean_game_margin=float(margins.mean()),
         median_game_margin=float(np.median(margins)),
         prob_cover=prob_cover,
+        set_score_probs=set_score_probs,
     )
 
 

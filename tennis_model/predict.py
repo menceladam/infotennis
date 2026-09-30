@@ -82,6 +82,14 @@ def main():
     for line, prob in sorted(proj.prob_cover.items()):
         print(f"  {format_favorite_line(a['name'], line)}: {prob:.1%}")
 
+    if proj.set_score_probs:
+        from tennis_model.odds import decimal_odds
+        print("\nCorrect set score:")
+        for score, key in [("2-0", "2-0"), ("2-1", "2-1"), ("0-2", "0-2"), ("1-2", "1-2")]:
+            label = f"{a['name']} {score}" if score in ("2-0", "2-1") else f"{b['name']} {'2-0' if score=='0-2' else '2-1'}"
+            prob = proj.set_score_probs[key]
+            print(f"  {label}: fair odds {decimal_odds(prob):.2f} ({prob:.1%})")
+
 
 if __name__ == "__main__":
     main()

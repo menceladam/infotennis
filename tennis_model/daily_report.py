@@ -99,9 +99,11 @@ def main():
                     -line: 1 - prob for line, prob in proj.prob_cover.items()
                 }
                 target_line, target_prob, target_odds = line_for_odds_range(fav_cover, 1.80, 2.00)
+                fav_2_0_prob = proj.set_score_probs["2-0"] if fav_is_p1 else proj.set_score_probs["0-2"]
 
                 print(f"  {r.round}: {r.p1_name} ({win_prob_1:.0%}) vs {r.p2_name} ({1-win_prob_1:.0%})"
-                      f"  ->  target: {format_favorite_line(fav_name, target_line)} @ {target_odds:.2f}")
+                      f"  ->  target: {format_favorite_line(fav_name, target_line)} @ {target_odds:.2f}"
+                      f"  |  {fav_name} 2-0: {decimal_odds(fav_2_0_prob):.2f} ({fav_2_0_prob:.0%})")
 
                 predictions.append({
                     "tournament": tourney, "round": r.round, "surface": surface,
@@ -144,6 +146,16 @@ def main():
                 cover_prob = fav_cover[line]
                 print(f"      {format_favorite_line(p['favorite'], line)}: fair odds {decimal_odds(cover_prob):.2f} "
                       f"({cover_prob:.1%})")
+
+            fav_2_0 = proj.set_score_probs["2-0"] if fav_is_p1 else proj.set_score_probs["0-2"]
+            fav_2_1 = proj.set_score_probs["2-1"] if fav_is_p1 else proj.set_score_probs["1-2"]
+            dog_2_0 = proj.set_score_probs["0-2"] if fav_is_p1 else proj.set_score_probs["2-0"]
+            dog_2_1 = proj.set_score_probs["1-2"] if fav_is_p1 else proj.set_score_probs["2-1"]
+            print(f"    Correct set score:")
+            print(f"      {p['favorite']} 2-0: fair odds {decimal_odds(fav_2_0):.2f} ({fav_2_0:.1%})")
+            print(f"      {p['favorite']} 2-1: fair odds {decimal_odds(fav_2_1):.2f} ({fav_2_1:.1%})")
+            print(f"      {underdog} 2-0: fair odds {decimal_odds(dog_2_0):.2f} ({dog_2_0:.1%})")
+            print(f"      {underdog} 2-1: fair odds {decimal_odds(dog_2_1):.2f} ({dog_2_1:.1%})")
 
 
 if __name__ == "__main__":
